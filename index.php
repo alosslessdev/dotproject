@@ -113,6 +113,11 @@ if (dPgetParam($_POST, 'lostpass', 0)) {
 // Include TOTP class
 require_once DP_BASE_DIR . '/classes/totp.class.php';
 
+// Ensure we have a UI style so require paths are correct
+if (!isset($uistyle) || !$uistyle) {
+	$uistyle = dPgetConfig('host_style');
+}
+
 // check if the user is trying to log in
 // Note the change to REQUEST instead of POST.  This is so that we can
 // support alternative authentication methods such as the PostNuke
@@ -146,15 +151,38 @@ if (isset($_REQUEST['login'])) {
 		// User has 2FA enabled, verify TOTP code
 		if (!$totp_code) {
 			// No TOTP code provided, show 2FA page
-			require DP_BASE_DIR . '/style/' . $uistyle . '/totp.php';
-			exit();
+				$totp_path = DP_BASE_DIR . '/style/' . $uistyle . '/totp.php';
+				if (!file_exists($totp_path)) {
+					// fallback: try default host style
+					$fallback = dPgetConfig('host_style');
+					$fallback_path = DP_BASE_DIR . '/style/' . $fallback . '/totp.php';
+					if (file_exists($fallback_path)) {
+						$totp_path = $fallback_path;
+					} else {
+						echo 'TOTP UI file missing: ' . htmlspecialchars($totp_path);
+						exit();
+					}
+				}
+				require $totp_path;
+				exit();
 		} else {
 			// Verify TOTP code
 			$totp = new TOTP($result['user_totp_secret']);
 			if (!$totp->verifyCode($totp_code)) {
 				$AppUI->setMsg('Invalid authentication code');
-				require DP_BASE_DIR . '/style/' . $uistyle . '/totp.php';
-				exit();
+					$totp_path = DP_BASE_DIR . '/style/' . $uistyle . '/totp.php';
+					if (!file_exists($totp_path)) {
+						$fallback = dPgetConfig('host_style');
+						$fallback_path = DP_BASE_DIR . '/style/' . $fallback . '/totp.php';
+						if (file_exists($fallback_path)) {
+							$totp_path = $fallback_path;
+						} else {
+							echo 'TOTP UI file missing: ' . htmlspecialchars($totp_path);
+							exit();
+						}
+					}
+					require $totp_path;
+					exit();
 			}
 		}
 	}
