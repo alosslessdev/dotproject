@@ -110,6 +110,9 @@ if (dPgetParam($_POST, 'lostpass', 0)) {
 	exit();
 }
 
+// Include TOTP class
+require_once DP_BASE_DIR . '/classes/totp.class.php';
+
 // check if the user is trying to log in
 // Note the change to REQUEST instead of POST.  This is so that we can
 // support alternative authentication methods such as the PostNuke
@@ -118,16 +121,46 @@ if (isset($_REQUEST['login'])) {
 	$username = dPgetCleanParam($_POST, 'username', '');
 	$password = dPgetParam($_POST, 'password', '');
 	$redirect = dPgetParam($_REQUEST, 'redirect', '');
+	$totp_code = dPgetParam($_POST, 'totp_code', '');
+
 	$AppUI->setUserLocale();
 	@include_once(DP_BASE_DIR . '/locales/' . $AppUI->user_locale . '/locales.php');
 	@include_once DP_BASE_DIR . '/locales/core.php';
+
+	// First verify username and password
 	$ok = $AppUI->login($username, $password);
+	
 	if (!$ok) {
 		$AppUI->setMsg('Login Failed');
-	} else {
-		//Register login in user_acces_log
-		$AppUI->registerLogin();
+		$AppUI->redirect($redirect);
 	}
+
+	// Check if user has 2FA enabled
+	$q = new DBQuery;
+	$q->addTable('users');
+	$q->addQuery('user_totp_enabled, user_totp_secret');
+	$q->addWhere('user_id = ' . (int)$AppUI->user_id);
+	$result = $q->loadHash();
+
+	if ($result && $result['user_totp_enabled']) {
+		// User has 2FA enabled, verify TOTP code
+		if (!$totp_code) {
+			// No TOTP code provided, show 2FA page
+			require DP_BASE_DIR . '/style/' . $uistyle . '/totp.php';
+			exit();
+		} else {
+			// Verify TOTP code
+			$totp = new TOTP($result['user_totp_secret']);
+			if (!$totp->verifyCode($totp_code)) {
+				$AppUI->setMsg('Invalid authentication code');
+				require DP_BASE_DIR . '/style/' . $uistyle . '/totp.php';
+				exit();
+			}
+		}
+	}
+
+	// If we get here, either 2FA is not enabled or code was valid
+	$AppUI->registerLogin();
 	addHistory('login', $AppUI->user_id, 'login',
 	           ($AppUI->user_first_name . ' ' . $AppUI->user_last_name));
 	$AppUI->redirect($redirect);
