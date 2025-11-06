@@ -746,9 +746,16 @@ class CAppUI {
 		require_once DP_BASE_DIR.'/classes/authenticator.class.php';
 
 		$auth_method = dPgetConfig('auth_method', 'sql');
-		if (@$_POST['login'] != 'login'
-		    && @$_POST['login'] != $this->_('login', UI_OUTPUT_RAW)
-		    && $_REQUEST['login'] != $auth_method) {
+		// Allow the standard localized 'login', the literal 'login', the
+		// configured auth method, or numeric timestamp-style tokens used by
+		// the theme forms (they set a hidden login value to time()).
+		$post_login = isset($_POST['login']) ? $_POST['login'] : null;
+		$req_login = isset($_REQUEST['login']) ? $_REQUEST['login'] : null;
+		$is_numeric_token = is_string($post_login) && ctype_digit($post_login);
+		if ($post_login !== 'login'
+			&& $post_login !== $this->_('login', UI_OUTPUT_RAW)
+			&& $req_login !== $auth_method
+			&& !$is_numeric_token) {
 			die('You have chosen to log in using an unsupported or disabled login method');
 		}
 		$auth =& getauth($auth_method);
